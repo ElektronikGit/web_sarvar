@@ -23,18 +23,26 @@ inline void receive_msg(uintptr_t sock_fd) {
         if (errno != EWOULDBLOCK) {
             handle_error("Receiving data from socket failed");
         }
-
         return;
     }
 
     std::cout << thread_id << " thread received message: " << (std::string) buffer << std::endl;
+
+    if (strncmp(buffer, "exit", 4) == 0) {
+        auto msg = "bye blyat!\n";
+        send(sock_fd, msg, strlen(msg), 0);
+        close(sock_fd);
+        return;
+    }
 
     std::stringstream ss;
     ss << thread_id;
     ss << " thread echoes ";
     ss << buffer;
 
-    send(sock_fd, ss.rdbuf(), sizeof ss.rdbuf(), 0);
+    const std::string tmp = ss.str();
+    const char* cstr = tmp.c_str();
+    send(sock_fd, cstr, strlen(cstr), 0);
 }
 
 
@@ -129,8 +137,7 @@ void WorkerThread::Work() {
 
 
 
-ListenerThread::ListenerThread(int port, Queue* queue)
-: port_(port) {
+ListenerThread::ListenerThread(int port, Queue* queue) : port_(port) {
     queue_ = queue;
     std::cout << "ListenerThread initialised" << std::endl;
 }
@@ -153,6 +160,9 @@ void ListenerThread::Work() {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     sock_fd_ = socket(AF_INET, SOCK_STREAM, 0);
+    int enable = 1;
+    if (setsockopt(sock_fd_, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+        handle_error("setsockopt(SO_REUSEADDR) failed");
     if (sock_fd_ == -1) {
         handle_error("Failed ot create socket");
     }
